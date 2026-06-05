@@ -1,0 +1,18 @@
+# Environments
+.env
+venv/
+.venv/
+env/
+
+# Python Cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Project specific storage
+uploads/
+chroma_db/
+
+# IDE files
+.vscode/
+.idea/
