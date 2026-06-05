@@ -2,7 +2,7 @@
 
 SmartDocs AI is a secure, multi-tenant RAG (Retrieval-Augmented Generation) document assistant. It allows users to upload documents (PDF, DOCX, TXT), extracts and indexes their contents into vector storage (ChromaDB) and metadata storage (MongoDB), and enables natural language Q&A with strict user-level isolation.
 
-## 🚀 Features
+##  Features
 
 - **User Authentication**: Secure user registration and login using JWT (Access & Refresh tokens) and bcrypt.
 - **Document Management**: Upload, list, and delete documents. Extracts text from PDFs, DOCX, and TXT files.
@@ -11,7 +11,7 @@ SmartDocs AI is a secure, multi-tenant RAG (Retrieval-Augmented Generation) docu
 - **Chat History**: Persists Q&A sessions.
 - **Multi-Tenant Isolation**: Strict security ensuring users can only search and access their own documents.
 
-## 🛠️ Technology Stack
+## Technology Stack
 
 - **Framework**: FastAPI (Python 3.11+)
 - **Metadata Database**: MongoDB (Motor async driver)
@@ -20,7 +20,7 @@ SmartDocs AI is a secure, multi-tenant RAG (Retrieval-Augmented Generation) docu
 - **LLM Engine**: OpenAI (`gpt-4o-mini`)
 - **Deployment**: Docker & Docker Compose
 
-## ⚙️ Setup & Installation
+## Setup & Installation
 
 ### Prerequisites
 
@@ -92,7 +92,7 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-## 📖 API Endpoints Overview
+## API Endpoints Overview
 
 - **Auth**: `/auth/register`, `/auth/login`, `/auth/me`, `/auth/refresh`
 - **Documents**: `/documents/upload`, `/documents/list`, `/documents/{id}/status`, `/documents/{id}` (Delete)
@@ -101,7 +101,7 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 Visit `http://localhost:8000/docs` for the complete OpenAPI specification and to test the endpoints interactively.
 
-## 🧪 Testing
+## Testing
 
 A Python verification script (`verify_endpoints.py`) is provided to test the end-to-end lifecycle, including auth, document uploads, polling, and RAG QA.
 
