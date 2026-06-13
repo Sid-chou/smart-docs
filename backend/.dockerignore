@@ -1,0 +1,31 @@
+# Python files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.venv/
+venv/
+env/
+
+# Git
+.git/
+.gitignore
+
+# Frontend code & build artifacts
+frontend/
+
+# Local databases and uploads (must be persistent volumes in production)
+chroma_db/
+uploads/
+
+# Documentation and plan files
+*.docx
+*.md
+project-updated.md
+smartdocs_backend.md
+smartdocs_backend_updated.md
+
+# Development / environment local secrets
+.env
+.env.local

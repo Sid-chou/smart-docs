@@ -7,6 +7,9 @@ class Settings(BaseSettings):
     mongodb_url: str = "mongodb://localhost:27017"
     database_name: str = "smartdocs"
 
+    # CORS settings
+    cors_origins: str = "http://localhost:3000"
+
     # JWT Authentication settings
     secret_key: str
     algorithm: str = "HS256"

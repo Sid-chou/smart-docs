@@ -3,6 +3,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from app.core.config import settings
 from app.core.database import get_database, close_database
 from app.core.logging import setup_logging, logger
 from app.routers import auth, documents, chat, admin
@@ -35,9 +36,12 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Parse allowed CORS origins from settings
+origins = [origin.strip() for origin in settings.cors_origins.split(",") if origin.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Restrict in production
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
