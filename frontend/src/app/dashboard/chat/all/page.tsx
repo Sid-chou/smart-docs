@@ -1,6 +1,14 @@
+"use client";
+
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import { ChatSidebar } from "@/components/chat/ChatSidebar";
-import { ChatInterface } from "@/components/chat/ChatInterface";
+import dynamic from "next/dynamic";
+
+// Dynamic import with SSR disabled to optimize page loading
+const ChatInterface = dynamic(
+  () => import("@/components/chat/ChatInterface").then((mod) => mod.ChatInterface),
+  { ssr: false }
+);
 
 export default function GlobalChatPage() {
   return (

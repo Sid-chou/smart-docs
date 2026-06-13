@@ -2,6 +2,8 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import { apiClient } from "@/lib/api/client";
+import { useQuery } from "@tanstack/react-query";
+import { useAuthStore } from "@/lib/stores/auth";
 import {
   IconMessageChatbot,
   IconSend,
@@ -33,15 +35,58 @@ interface ChatInterfaceProps {
 export function ChatInterface({ documentId }: ChatInterfaceProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isClearing, setIsClearing] = useState(false);
   const [inputValue, setInputValue] = useState("");
   const [inputError, setInputError] = useState<string | null>(null);
-  
-  // Track open/collapsed citations state at message index level
-  const [openCitations, setOpenCitations] = useState<Record<string, boolean>>({});
-  // Track show-more state for excerpts using messageId-sourceIdx keys
-  const [expandedExcerpts, setExpandedExcerpts] = useState<Record<string, boolean>>({});
 
+  const { isAuthenticated } = useAuthStore();
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Fetch chat history with TanStack Query v5, scoped by documentId
+  const { data: historyData, isLoading: historyLoading, refetch: refetchHistory } = useQuery({
+    queryKey: ["chat-history", documentId],
+    queryFn: async () => {
+      if (!useAuthStore.getState().isAuthenticated) return [];
+      
+      const url = documentId === "all" ? "/chat/history" : `/chat/history?document_id=${documentId}`;
+      const res = await apiClient.get(url);
+      
+      const sessions = res.data || [];
+      // If global scope, find session with null document_id
+      if (documentId === "all") {
+        const globalSession = sessions.find((s: any) => !s.document_id);
+        return globalSession ? globalSession.messages : [];
+      } else {
+        // For isolated scope, find session matching this documentId
+        const docSession = sessions.find((s: any) => s.document_id === documentId);
+        return docSession ? docSession.messages : [];
+      }
+    },
+    enabled: isAuthenticated,
+  });
+
+  // Hydrate chat messages list from fetched history
+  useEffect(() => {
+    if (historyData) {
+      const formatted: Message[] = [];
+      historyData.forEach((msg: any, idx: number) => {
+        formatted.push({
+          id: `q-${idx}`,
+          role: "user",
+          content: msg.question,
+        });
+        formatted.push({
+          id: `a-${idx}`,
+          role: "assistant",
+          content: msg.answer,
+          sources: msg.sources || [],
+        });
+      });
+      setMessages(formatted);
+    } else {
+      setMessages([]);
+    }
+  }, [historyData]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -51,15 +96,33 @@ export function ChatInterface({ documentId }: ChatInterfaceProps) {
     scrollToBottom();
   }, [messages, isLoading]);
 
+  const clearHistory = async () => {
+    if (isClearing) return;
+    if (!confirm("Are you sure you want to permanently clear the conversation history for this scope?")) {
+      return;
+    }
+
+    setIsClearing(true);
+    try {
+      const url = documentId === "all" ? "/chat/history" : `/chat/history?document_id=${documentId}`;
+      await apiClient.delete(url);
+      toast.success("Chat history cleared.");
+      refetchHistory();
+    } catch (err: any) {
+      toast.error(err.response?.data?.detail || "Could not clear chat history.");
+    } finally {
+      setIsClearing(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // If isLoading is true and user tries to submit: do nothing — no queuing, no second request.
-    if (isLoading) return;
+    // Guard against double submission / enter key bypass
+    if (isLoading || isClearing) return;
 
     const trimmed = inputValue.trim();
 
-    // Validate inputValue.trim().length >= 3 (show inline error if not)
     if (trimmed.length < 3) {
       setInputError("Query must be at least 3 characters long.");
       return;
@@ -71,7 +134,6 @@ export function ChatInterface({ documentId }: ChatInterfaceProps) {
     const userMessageId = Math.random().toString(36).substring(7);
     const assistantMessageId = Math.random().toString(36).substring(7);
 
-    // Push user message to messages list
     const userMsg: Message = {
       id: userMessageId,
       role: "user",
@@ -82,7 +144,6 @@ export function ChatInterface({ documentId }: ChatInterfaceProps) {
     setInputValue("");
 
     try {
-      // POST to /chat/ask
       const response = await apiClient.post("/chat/ask", {
         question: trimmed,
         document_id: documentId === "all" ? null : documentId,
@@ -107,6 +168,11 @@ export function ChatInterface({ documentId }: ChatInterfaceProps) {
     }
   };
 
+  // Track open/collapsed citations state at message index level
+  const [openCitations, setOpenCitations] = useState<Record<string, boolean>>({});
+  // Track show-more state for excerpts using messageId-sourceIdx keys
+  const [expandedExcerpts, setExpandedExcerpts] = useState<Record<string, boolean>>({});
+
   const toggleCitations = (msgId: string) => {
     setOpenCitations((prev) => ({ ...prev, [msgId]: !prev[msgId] }));
   };
@@ -127,8 +193,35 @@ export function ChatInterface({ documentId }: ChatInterfaceProps) {
     return "bg-rose-50 text-rose-700 dark:bg-rose-950/30 dark:text-rose-400 border-rose-200 dark:border-rose-900";
   };
 
+  if (historyLoading) {
+    return (
+      <div className="flex-1 p-6 space-y-6 overflow-y-auto bg-slate-50/30 dark:bg-zinc-950/30 h-full flex flex-col justify-center items-center">
+        <IconLoader className="w-8 h-8 animate-spin text-indigo-600 dark:text-indigo-400 mb-2" />
+        <span className="text-xs text-slate-500 dark:text-slate-400 font-bold animate-pulse">
+          Loading conversation history...
+        </span>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col h-full bg-slate-50/30 dark:bg-zinc-950/30">
+      {/* Top Header Bar */}
+      <div className="px-6 py-3 bg-white dark:bg-zinc-900 border-b border-slate-200 dark:border-zinc-800 flex items-center justify-between">
+        <span className="text-xs font-black text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+          {documentId === "all" ? "Global Knowledge Base Chat" : "Isolated Document Query"}
+        </span>
+        {messages.length > 0 && (
+          <button
+            onClick={clearHistory}
+            disabled={isClearing}
+            className="text-[10px] font-black text-red-600 hover:text-red-700 hover:underline uppercase tracking-wider transition-colors disabled:opacity-50 cursor-pointer"
+          >
+            Clear History
+          </button>
+        )}
+      </div>
+
       {/* Messages Scroll Area */}
       <div className="flex-1 overflow-y-auto p-6 space-y-6">
         {messages.length === 0 && !isLoading ? (

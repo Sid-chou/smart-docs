@@ -1,13 +1,22 @@
+"use client";
+
+import { use } from "react";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import { ChatSidebar } from "@/components/chat/ChatSidebar";
-import { ChatInterface } from "@/components/chat/ChatInterface";
+import dynamic from "next/dynamic";
+
+// Dynamic import with SSR disabled to optimize page loading
+const ChatInterface = dynamic(
+  () => import("@/components/chat/ChatInterface").then((mod) => mod.ChatInterface),
+  { ssr: false }
+);
 
 interface ChatPageProps {
   params: Promise<{ documentId: string }>;
 }
 
-export default async function DocumentChatPage({ params }: ChatPageProps) {
-  const resolvedParams = await params;
+export default function DocumentChatPage({ params }: ChatPageProps) {
+  const resolvedParams = use(params);
   return (
     <DashboardLayout>
       <div className="flex h-[calc(100vh-12rem)] border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 rounded-2xl overflow-hidden shadow-xl max-w-6xl mx-auto">

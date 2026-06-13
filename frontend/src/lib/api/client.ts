@@ -43,6 +43,34 @@ apiClient.interceptors.request.use(
 apiClient.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
+    // Normalize error.response.data.detail to string
+    if (error.response && error.response.data) {
+      const data = error.response.data as any;
+      if (data.detail !== undefined) {
+        if (Array.isArray(data.detail)) {
+          const mapped = data.detail
+            .map((err: any) => {
+              const field = err.loc ? err.loc[err.loc.length - 1] : "field";
+              return `${field}: ${err.msg}`;
+            })
+            .join(", ");
+          data.detail = mapped;
+        } else if (typeof data.detail !== "string") {
+          data.detail = "An unexpected error occurred";
+        }
+      } else {
+        data.detail = "An unexpected error occurred";
+      }
+    } else {
+      // Mock response structure for network/unknown errors
+      error.response = {
+        ...error.response,
+        data: {
+          detail: error.message || "An unexpected error occurred",
+        },
+      } as any;
+    }
+
     const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
 
     if (error.response?.status === 401 && originalRequest && !originalRequest._retry) {
@@ -109,3 +137,4 @@ apiClient.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+

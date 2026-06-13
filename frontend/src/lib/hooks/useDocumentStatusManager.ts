@@ -20,6 +20,9 @@ export function useDocumentStatusManager() {
   const { data } = useQuery({
     queryKey: ["documents-status-poll"],
     queryFn: async () => {
+      if (!useAuthStore.getState().isAuthenticated) {
+        return [];
+      }
       const res = await apiClient.get("/documents/?page=1&page_size=100");
       return res.data.items as DocumentItem[];
     },
