@@ -13,7 +13,7 @@ passlib[bcrypt]==1.7.4
 
 # Config
 pydantic-settings==2.3.0
-pydantic[email]==2.7.1
+pydantic[email]>=2.7.4
 
 # File processing
 PyMuPDF==1.24.5
