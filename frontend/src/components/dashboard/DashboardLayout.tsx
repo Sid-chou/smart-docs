@@ -3,39 +3,25 @@
 import React, { useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
-import { useAuthStore } from "@/store/auth";
+import { useAuthStore } from "@/lib/stores/auth";
 import {
   IconFiles,
   IconMessageChatbot,
   IconShieldLock,
   IconLogout,
   IconUserCircle,
-  IconLoader,
 } from "@tabler/icons-react";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  const { user, isAuthenticated, isLoading, logout } = useAuthStore();
+  const { user, isAuthenticated, logout } = useAuthStore();
 
   useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
+    if (!isAuthenticated) {
       router.replace("/login");
     }
-  }, [isAuthenticated, isLoading, router]);
-
-  if (isLoading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50 dark:bg-zinc-950">
-        <div className="flex flex-col items-center gap-3">
-          <IconLoader className="w-8 h-8 animate-spin text-indigo-600 dark:text-indigo-400" />
-          <p className="text-sm text-slate-500 dark:text-slate-400 font-medium">
-            Verifying session...
-          </p>
-        </div>
-      </div>
-    );
-  }
+  }, [isAuthenticated, router]);
 
   if (!isAuthenticated || !user) {
     return null;
@@ -49,7 +35,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     },
     {
       name: "AI Chat Assistant",
-      href: "/chat",
+      href: "/dashboard/chat/all",
       icon: IconMessageChatbot,
     },
   ];
@@ -80,7 +66,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <nav className="flex-1 px-4 py-6 space-y-1">
           {navItems.map((item) => {
             const Icon = item.icon;
-            const isActive = pathname === item.href;
+            const isActive = pathname === item.href || (item.href === "/dashboard/chat/all" && pathname.startsWith("/dashboard/chat"));
             return (
               <Link
                 key={item.name}
@@ -104,7 +90,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <IconUserCircle className="w-9 h-9 text-slate-400 shrink-0" />
             <div className="min-w-0 flex-1">
               <p className="text-sm font-bold text-slate-800 dark:text-slate-200 truncate">
-                {user.full_name}
+                {user.full_name || user.username}
               </p>
               <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
                 {user.email}
@@ -114,7 +100,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <button
             onClick={() => {
               logout();
-              router.push("/login");
             }}
             className="w-full flex items-center justify-center gap-2 py-2 px-4 rounded-lg border border-slate-200 hover:border-red-200 text-slate-600 hover:text-red-600 bg-white dark:border-zinc-800 dark:hover:border-red-950 dark:text-slate-400 dark:bg-zinc-950 dark:hover:text-red-400 dark:hover:bg-red-950/10 text-xs font-semibold shadow-sm transition-all cursor-pointer"
           >
@@ -134,20 +119,20 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <div className="flex items-center gap-4">
             <Link
               href="/dashboard"
-              className={`text-sm font-bold ${pathname === "/dashboard" ? "text-indigo-600" : "text-slate-600"}`}
+              className={`text-sm font-bold ${pathname === "/dashboard" ? "text-indigo-600 font-extrabold" : "text-slate-600"}`}
             >
               Docs
             </Link>
             <Link
-              href="/chat"
-              className={`text-sm font-bold ${pathname === "/chat" ? "text-indigo-600" : "text-slate-600"}`}
+              href="/dashboard/chat/all"
+              className={`text-sm font-bold ${pathname.startsWith("/dashboard/chat") ? "text-indigo-600 font-extrabold" : "text-slate-600"}`}
             >
               Chat
             </Link>
             {user.is_admin && (
               <Link
                 href="/admin"
-                className={`text-sm font-bold ${pathname === "/admin" ? "text-indigo-600" : "text-slate-600"}`}
+                className={`text-sm font-bold ${pathname === "/admin" ? "text-indigo-600 font-extrabold" : "text-slate-600"}`}
               >
                 Admin
               </Link>
@@ -155,7 +140,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <button
               onClick={() => {
                 logout();
-                router.push("/login");
               }}
               className="text-slate-600 dark:text-slate-400 hover:text-red-600 cursor-pointer"
             >
