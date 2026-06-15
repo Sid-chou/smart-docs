@@ -16,9 +16,21 @@ def get_chroma_client() -> chromadb.PersistentClient:
 
 def get_or_create_collection():
     client = get_chroma_client()
+    
+    # We must pass a dummy embedding function to ChromaDB.
+    # If we don't, ChromaDB will automatically try to download and load
+    # the default sentence-transformers model (all-MiniLM-L6-v2),
+    # which requires >1GB RAM and will instantly crash Render Free Tier (OOM).
+    # Since we explicitly pass embeddings in collection.add(), this dummy is never actually called.
+    from chromadb import EmbeddingFunction, Documents, Embeddings
+    class DummyEmbeddingFunction(EmbeddingFunction):
+        def __call__(self, input: Documents) -> Embeddings:
+            return []
+
     return client.get_or_create_collection(
         name="smartdocs_chunks",
         metadata={"hnsw:space": "cosine"},
+        embedding_function=DummyEmbeddingFunction(),
     )
 
 
