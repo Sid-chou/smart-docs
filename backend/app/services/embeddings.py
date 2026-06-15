@@ -20,18 +20,19 @@ def get_query_embedding(query: str) -> List[float]:
 
 def _openai_embeddings(texts: List[str]) -> List[List[float]]:
     from openai import OpenAI
-    client = OpenAI(api_key=settings.openai_api_key)
-
-    # OpenAI has a max batch size — chunk if needed
     all_embeddings = []
-    batch_size = 100
-    for i in range(0, len(texts), batch_size):
-        batch = texts[i:i + batch_size]
-        response = client.embeddings.create(
-            model=settings.embedding_model,
-            input=batch,
-        )
-        all_embeddings.extend([item.embedding for item in response.data])
+    
+    with OpenAI(api_key=settings.openai_api_key) as client:
+        # OpenAI has a max batch size — chunk if needed
+        batch_size = 100
+        for i in range(0, len(texts), batch_size):
+            batch = texts[i:i + batch_size]
+            response = client.embeddings.create(
+                model=settings.embedding_model,
+                input=batch,
+            )
+            all_embeddings.extend([item.embedding for item in response.data])
+            
     return all_embeddings
 
 

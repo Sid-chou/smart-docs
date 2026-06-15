@@ -10,7 +10,9 @@ def get_chroma_client() -> chromadb.PersistentClient:
     global _chroma_client
     if _chroma_client is None:
         # Initialized only on demand. Cosine metric config is declared here.
-        _chroma_client = chromadb.PersistentClient(path=settings.chroma_persist_dir)
+        import chromadb.config
+        settings_chroma = chromadb.config.Settings(anonymized_telemetry=False)
+        _chroma_client = chromadb.PersistentClient(path=settings.chroma_persist_dir, settings=settings_chroma)
     return _chroma_client
 
 

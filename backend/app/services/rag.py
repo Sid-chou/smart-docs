@@ -36,23 +36,23 @@ def build_context(chunks: List[Dict[str, Any]]) -> str:
 
 def ask_llm(question: str, context: str) -> str:
     from openai import OpenAI
-    client = OpenAI(api_key=settings.openai_api_key, base_url=settings.openai_base_url)
+    
+    with OpenAI(api_key=settings.openai_api_key, base_url=settings.openai_base_url) as client:
+        messages = [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {
+                "role": "user",
+                "content": f"Context:\n{context}\n\nQuestion: {question}"
+            },
+        ]
 
-    messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
-        {
-            "role": "user",
-            "content": f"Context:\n{context}\n\nQuestion: {question}"
-        },
-    ]
-
-    response = client.chat.completions.create(
-        model=settings.openai_model,   # gpt-4o-mini: cheaper + smarter than gpt-3.5-turbo
-        messages=messages,
-        temperature=0.1,        # Low temperature = factual, less creative
-        max_tokens=1000,
-    )
-    return response.choices[0].message.content
+        response = client.chat.completions.create(
+            model=settings.openai_model,   # gpt-4o-mini: cheaper + smarter than gpt-3.5-turbo
+            messages=messages,
+            temperature=0.1,        # Low temperature = factual, less creative
+            max_tokens=1000,
+        )
+        return response.choices[0].message.content
 
 
 def run_rag_pipeline(
