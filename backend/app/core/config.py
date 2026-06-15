@@ -11,15 +11,16 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:3000"
 
     # JWT Authentication settings
-    secret_key: str
+    secret_key: str = "your-super-secret-key-change-this-in-production"
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 15
     refresh_secret_key: str = ""
     refresh_token_expire_days: int = 7
 
-    # OpenAI settings
+    # OpenAI / LLM settings
     openai_api_key: str = ""
     openai_model: str = "gpt-4o-mini"
+    openai_base_url: str | None = None
     embedding_model: str = "text-embedding-3-small"
 
     # Embedding Strategy

@@ -36,7 +36,7 @@ def build_context(chunks: List[Dict[str, Any]]) -> str:
 
 def ask_llm(question: str, context: str) -> str:
     from openai import OpenAI
-    client = OpenAI(api_key=settings.openai_api_key)
+    client = OpenAI(api_key=settings.openai_api_key, base_url=settings.openai_base_url)
 
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},

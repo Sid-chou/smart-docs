@@ -16,6 +16,11 @@ setup_logging()
 async def lifespan(app: FastAPI):
     # Startup
     logger.info("Initializing database connection and indexes...")
+    if settings.secret_key == "your-super-secret-key-change-this-in-production":
+        logger.warning(
+            "SECURITY WARNING: Using the default insecure SECRET_KEY. "
+            "Please configure a secure SECRET_KEY environment variable in your production environment!"
+        )
     db = get_database()
     # Create MongoDB unique indexes and compound indexes on startup
     await db.users.create_index("email", unique=True)
