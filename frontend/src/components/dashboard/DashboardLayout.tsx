@@ -11,6 +11,7 @@ import {
   IconLogout,
   IconUserCircle,
 } from "@tabler/icons-react";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -54,12 +55,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {/* Sidebar Desktop */}
       <aside className="hidden md:flex flex-col w-64 border-r border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shrink-0">
         {/* Sidebar Header Logo */}
-        <div className="h-16 flex items-center px-6 border-b border-slate-100 dark:border-zinc-800/50">
+        <div className="h-16 flex items-center justify-between px-6 border-b border-slate-100 dark:border-zinc-800/50">
           <Link href="/dashboard" className="flex items-center gap-2">
             <span className="text-xl font-black bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 bg-clip-text text-transparent">
               SmartDocs AI
             </span>
           </Link>
+          <ThemeToggle />
         </div>
 
         {/* Navigation Section */}
@@ -137,6 +139,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 Admin
               </Link>
             )}
+            <ThemeToggle />
             <button
               onClick={() => {
                 logout();

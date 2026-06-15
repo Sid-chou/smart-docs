@@ -7,6 +7,7 @@ import { useAuthStore } from "@/lib/stores/auth";
 import { useDocumentStatusManager } from "@/lib/hooks/useDocumentStatusManager";
 import axios from "axios";
 import { IconLoader } from "@tabler/icons-react";
+import { ThemeProvider } from "next-themes";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -89,9 +90,11 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <GlobalStatusManager />
-      {children}
-      <Toaster position="top-right" richColors closeButton />
+      <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+        <GlobalStatusManager />
+        {children}
+        <Toaster position="top-right" richColors closeButton />
+      </ThemeProvider>
     </QueryClientProvider>
   );
 }
