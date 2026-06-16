@@ -22,7 +22,7 @@ def _openai_embeddings(texts: List[str]) -> List[List[float]]:
     from openai import OpenAI
     all_embeddings = []
     
-    with OpenAI(api_key=settings.openai_api_key) as client:
+    with OpenAI(api_key=settings.openai_api_key, base_url=settings.openai_base_url) as client:
         # OpenAI has a max batch size — chunk if needed
         batch_size = 100
         for i in range(0, len(texts), batch_size):
