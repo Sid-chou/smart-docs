@@ -153,13 +153,12 @@ def _sync_index_chunks(chunks, document_id, user_id, filename):
     Synchronous wrapper for ChromaDB indexing.
     Called via asyncio.to_thread() — runs in a worker thread, not the event loop.
     """
-    import asyncio
-    asyncio.run(index_document_chunks(
+    index_document_chunks(
         chunks=chunks,
         document_id=document_id,
         user_id=user_id,
         filename=filename,
-    ))
+    )
 
 
 @router.get("/{document_id}/status")
@@ -245,7 +244,7 @@ async def delete_document(
     # Step 2: Remove vectors from ChromaDB
     try:
         from app.services.vectorstore import delete_document_chunks
-        await delete_document_chunks(
+        delete_document_chunks(
             document_id=document_id,
             user_id=str(current_user["_id"])
         )

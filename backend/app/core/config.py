@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     embedding_model: str = "text-embedding-3-small"
 
     # Embedding Strategy
-    embedding_strategy: str = "local"  # "openai" or "local"
+    embedding_strategy: str = "openai"  # "openai" or "local"
 
     # ChromaDB settings
     chroma_persist_dir: str = "./chroma_db"

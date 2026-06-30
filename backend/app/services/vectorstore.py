@@ -5,6 +5,13 @@ from app.services.embeddings import get_embeddings
 
 _chroma_client = None
 
+from chromadb import EmbeddingFunction, Documents, Embeddings
+
+class DummyEmbeddingFunction(EmbeddingFunction):
+    def __call__(self, input: Documents) -> Embeddings:
+        return []
+
+_dummy_embedding_fn = DummyEmbeddingFunction()
 
 def get_chroma_client() -> chromadb.PersistentClient:
     global _chroma_client
@@ -19,24 +26,14 @@ def get_chroma_client() -> chromadb.PersistentClient:
 def get_or_create_collection():
     client = get_chroma_client()
     
-    # We must pass a dummy embedding function to ChromaDB.
-    # If we don't, ChromaDB will automatically try to download and load
-    # the default sentence-transformers model (all-MiniLM-L6-v2),
-    # which requires >1GB RAM and will instantly crash Render Free Tier (OOM).
-    # Since we explicitly pass embeddings in collection.add(), this dummy is never actually called.
-    from chromadb import EmbeddingFunction, Documents, Embeddings
-    class DummyEmbeddingFunction(EmbeddingFunction):
-        def __call__(self, input: Documents) -> Embeddings:
-            return []
-
     return client.get_or_create_collection(
         name="smartdocs_chunks",
         metadata={"hnsw:space": "cosine"},
-        embedding_function=DummyEmbeddingFunction(),
+        embedding_function=_dummy_embedding_fn,
     )
 
 
-async def index_document_chunks(
+def index_document_chunks(
     chunks: List[str],
     document_id: str,
     user_id: str,
@@ -75,7 +72,7 @@ async def index_document_chunks(
     )
 
 
-async def delete_document_chunks(document_id: str, user_id: str) -> None:
+def delete_document_chunks(document_id: str, user_id: str) -> None:
     """
     Remove vectors from ChromaDB matching document_id.
     Filters on user_id for multi-tenant deletion safety.
