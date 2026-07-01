@@ -21,7 +21,9 @@ python-docx==1.1.2
 
 # Embeddings
 openai==2.41.0
-sentence-transformers==3.0.1
+# sentence-transformers intentionally excluded:
+# It pulls PyTorch (~800MB) which exceeds Render's 512MB RAM limit.
+# Local embeddings are disabled. Set EMBEDDING_STRATEGY=openai in env.
 
 # Vector store
 chromadb==0.5.3

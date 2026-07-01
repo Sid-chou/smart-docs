@@ -102,7 +102,14 @@ async def index_document_in_background(
       pending → indexed            (success)
       pending → failed_unreadable  (scanned PDF, no text layer)
       pending → failed_error       (unexpected exception)
+
+    Memory discipline:
+      - `text` and `chunks` are explicitly deleted after use.
+      - Raw uploaded file is removed after indexing — it's dead weight once
+        vectors are in ChromaDB. Render's disk is ephemeral anyway.
+      - gc.collect() forces reclaim after heavy allocations in a worker thread.
     """
+    import gc
     from app.services.extraction import ScannedPDFError
 
     try:
@@ -110,17 +117,26 @@ async def index_document_in_background(
         text = await asyncio.to_thread(extract_text, file_path, file_type)
         chunks = await asyncio.to_thread(chunk_text, text)
 
+        # Free the raw text string immediately — chunks are all we need
+        del text
+        gc.collect()
+
         await asyncio.to_thread(
             _sync_index_chunks,
             chunks, document_id, user_id, os.path.basename(file_path)
         )
+
+        chunk_count = len(chunks)
+        # Free chunks array — vectors are now in ChromaDB
+        del chunks
+        gc.collect()
 
         await db.documents.update_one(
             {"_id": ObjectId(document_id)},
             {"$set": {
                 "status": "indexed",
                 "is_indexed": True,
-                "chunk_count": len(chunks),
+                "chunk_count": chunk_count,
             }}
         )
 
@@ -146,6 +162,16 @@ async def index_document_in_background(
                 "error_message": "Indexing failed. Please try uploading the document again.",
             }}
         )
+
+    finally:
+        # Always clean up the raw file — it's dead weight once indexed
+        # (or failed). Render's disk is ephemeral and 512 MB RAM can't
+        # afford to buffer raw PDFs indefinitely.
+        if os.path.exists(file_path):
+            try:
+                os.remove(file_path)
+            except OSError as cleanup_err:
+                print(f"[WARN] Could not remove uploaded file {file_path}: {cleanup_err}")
 
 
 def _sync_index_chunks(chunks, document_id, user_id, filename):
