@@ -10,36 +10,99 @@ export const apiClient = axios.create({
   },
 });
 
-let isRefreshing = false;
-let failedQueue: Array<{
-  resolve: (token: string) => void;
-  reject: (err: unknown) => void;
-}> = [];
+// Client-side helper to decode and check if JWT is expired or close to expiring
+function isTokenExpired(token: string): boolean {
+  try {
+    const payloadPart = token.split(".")[1];
+    if (!payloadPart) return true;
+    
+    const base64 = payloadPart.replace(/-/g, "+").replace(/_/g, "/");
+    const jsonPayload = decodeURIComponent(
+      atob(base64)
+        .split("")
+        .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+        .join("")
+    );
+    
+    const { exp } = JSON.parse(jsonPayload);
+    if (!exp) return true;
+    
+    // Check if token expires in the next 10 seconds (buffer to handle network latency)
+    const bufferSeconds = 10;
+    return Date.now() / 1000 + bufferSeconds > exp;
+  } catch (err) {
+    return true;
+  }
+}
 
-const processQueue = (error: unknown, token: string | null = null) => {
-  failedQueue.forEach((prom) => {
-    if (error) {
-      prom.reject(error);
-    } else if (token) {
-      prom.resolve(token);
+let refreshPromise: Promise<string | null> | null = null;
+
+// Thread-safe token acquisition. Refreshes if expired.
+async function getValidToken(): Promise<string | null> {
+  const store = useAuthStore.getState();
+  let token = store.accessToken;
+
+  if (!token) {
+    return null;
+  }
+
+  if (isTokenExpired(token)) {
+    // If a refresh is already in progress, await that same operation
+    if (refreshPromise) {
+      return refreshPromise;
     }
-  });
-  failedQueue = [];
-};
 
-// Request Interceptor: Attach access token from memory (Zustand state)
+    const storedRefreshToken = store.refreshToken;
+    if (!storedRefreshToken) {
+      store.logout();
+      return null;
+    }
+
+    refreshPromise = (async () => {
+      try {
+        const response = await axios.post(`${API_URL}/auth/refresh`, {
+          refresh_token: storedRefreshToken,
+        });
+        const { access_token, refresh_token } = response.data;
+
+        // Save fresh tokens to Zustand store
+        store.login(
+          { access_token, refresh_token },
+          store.user
+        );
+        return access_token;
+      } catch (err) {
+        console.error("Preemptive token refresh failed:", err);
+        store.logout();
+        return null;
+      } finally {
+        refreshPromise = null;
+      }
+    })();
+
+    return refreshPromise;
+  }
+
+  return token;
+}
+
+// Request Interceptor: Attach fresh access token, refreshing if necessary
 apiClient.interceptors.request.use(
-  (config: InternalAxiosRequestConfig) => {
-    const token = useAuthStore.getState().accessToken;
-    if (token && config.headers) {
-      config.headers.Authorization = `Bearer ${token}`;
+  async (config: InternalAxiosRequestConfig) => {
+    try {
+      const token = await getValidToken();
+      if (token && config.headers) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
+    } catch (err) {
+      console.error("Failed to attach authorization header:", err);
     }
     return config;
   },
   (error) => Promise.reject(error)
 );
 
-// Response Interceptor: Handle 401 Unauthorized errors and trigger Token Refresh Rotation
+// Response Interceptor: Catch normalization of errors and ultimate fallback 401s
 apiClient.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
@@ -71,70 +134,13 @@ apiClient.interceptors.response.use(
       } as any;
     }
 
-    const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
-
-    if (error.response?.status === 401 && originalRequest && !originalRequest._retry) {
-      // On 401: if the request URL includes /auth/refresh, call logout() and reject immediately — no retry
-      if (originalRequest.url?.includes("/auth/refresh")) {
-        useAuthStore.getState().logout();
-        return Promise.reject(error);
-      }
-
-      // Otherwise: if isRefreshing, push to failedQueue and return a new Promise
-      if (isRefreshing) {
-        return new Promise<string>((resolve, reject) => {
-          failedQueue.push({ resolve, reject });
-        })
-          .then((token) => {
-            if (originalRequest.headers) {
-              originalRequest.headers.Authorization = `Bearer ${token}`;
-            }
-            return apiClient(originalRequest);
-          })
-          .catch((err) => Promise.reject(err));
-      }
-
-      originalRequest._retry = true;
-      isRefreshing = true;
-
-      try {
-        const storedRefreshToken = useAuthStore.getState().refreshToken;
-        if (!storedRefreshToken) {
-          throw new Error("No refresh token available");
-        }
-
-        // Call POST /auth/refresh with the stored refresh token
-        const response = await axios.post(`${API_URL}/auth/refresh`, {
-          refresh_token: storedRefreshToken,
-        });
-
-        const { access_token, refresh_token } = response.data;
-
-        // On success update Zustand access token and refresh token
-        useAuthStore.getState().login(
-          { access_token, refresh_token },
-          useAuthStore.getState().user
-        );
-
-        // Flush queue with new token
-        processQueue(null, access_token);
-
-        // Retry original request with new token
-        if (originalRequest.headers) {
-          originalRequest.headers.Authorization = `Bearer ${access_token}`;
-        }
-        return apiClient(originalRequest);
-      } catch (refreshError) {
-        // On failure: flush queue with rejection, call logout()
-        processQueue(refreshError, null);
-        useAuthStore.getState().logout();
-        return Promise.reject(refreshError);
-      } finally {
-        isRefreshing = false;
-      }
+    // If a request still returns 401 (e.g. revoked key, deleted user account), force logout
+    if (error.response?.status === 401) {
+      useAuthStore.getState().logout();
     }
 
     return Promise.reject(error);
   }
 );
+
 
