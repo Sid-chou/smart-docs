@@ -153,13 +153,16 @@ async def index_document_in_background(
 
     except Exception as e:
         # Unknown failure — log it, set a generic failure state.
+        import traceback
+        error_details = f"Indexing failed: {str(e)}"
         print(f"[INDEXING ERROR] doc={document_id} error={e!r}")
+        traceback.print_exc()
         await db.documents.update_one(
             {"_id": ObjectId(document_id)},
             {"$set": {
                 "status": "failed_error",
                 "is_indexed": False,
-                "error_message": "Indexing failed. Please try uploading the document again.",
+                "error_message": error_details,
             }}
         )
 
