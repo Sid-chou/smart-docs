@@ -37,12 +37,33 @@ def _openai_embeddings(texts: List[str]) -> List[List[float]]:
     from openai import OpenAI
     all_embeddings = []
 
-    with OpenAI(api_key=settings.openai_api_key, base_url=settings.openai_base_url) as client:
+    base_url = settings.openai_base_url
+    model = settings.embedding_model
+
+    # Automatically correct API version and model formatting for Google Gemini compatibility
+    if base_url and "generativelanguage.googleapis.com" in base_url:
+        # Correct the API version from v1 to v1beta (text-embedding-004 is not in v1/v1main)
+        if "/v1/" in base_url:
+            base_url = base_url.replace("/v1/", "/v1beta/")
+        elif base_url.endswith("/v1"):
+            base_url = base_url[:-3] + "/v1beta/"
+        
+        # Ensure base URL has trailing slash and /openai/ path prefix for OpenAI compatibility
+        if not base_url.endswith("/"):
+            base_url += "/"
+        if not base_url.endswith("openai/"):
+            base_url = base_url + "openai/"
+            
+        # Strip 'models/' prefix if present, as the OpenAI-compatible layer expects the model name directly
+        if model.startswith("models/"):
+            model = model.replace("models/", "")
+
+    with OpenAI(api_key=settings.openai_api_key, base_url=base_url) as client:
         batch_size = 100
         for i in range(0, len(texts), batch_size):
             batch = texts[i:i + batch_size]
             response = client.embeddings.create(
-                model=settings.embedding_model,
+                model=model,
                 input=batch,
             )
             # Extract only the float vectors — do NOT hold the full response object
