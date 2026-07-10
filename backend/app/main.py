@@ -72,6 +72,26 @@ async def debug_env():
         if chat_model in ("gpt-4o-mini", "gpt-4o", "gpt-3.5-turbo", "gpt-4"):
             chat_model = "gemini-2.0-flash"
 
+    # Test the API key against Gemini's models list endpoint to check quota
+    key = settings.openai_api_key or ""
+    key_preview = f"{key[:8]}...{key[-4:]}" if len(key) > 12 else "too_short_or_missing"
+
+    import httpx
+    models_status = "untested"
+    try:
+        r = httpx.get(
+            "https://generativelanguage.googleapis.com/v1beta/models",
+            headers={"x-goog-api-key": key},
+            timeout=10.0,
+        )
+        if r.status_code == 200:
+            model_names = [m["name"] for m in r.json().get("models", [])][:5]
+            models_status = f"OK — sample models: {model_names}"
+        else:
+            models_status = f"HTTP {r.status_code}: {r.text[:200]}"
+    except Exception as e:
+        models_status = f"Request failed: {e}"
+
     return {
         "embedding_strategy": settings.embedding_strategy,
         "openai_base_url": settings.openai_base_url,
@@ -79,6 +99,8 @@ async def debug_env():
         "is_gemini": ("generativelanguage.googleapis.com" in base_url) or (settings.embedding_model and "text-embedding" in settings.embedding_model),
         "openai_model_raw": settings.openai_model,
         "resolved_chat_model": chat_model,
+        "api_key_preview": key_preview,
+        "api_key_models_test": models_status,
     }
 
 
