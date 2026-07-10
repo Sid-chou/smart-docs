@@ -41,21 +41,25 @@ def _openai_embeddings(texts: List[str]) -> List[List[float]]:
     model = settings.embedding_model
 
     # Automatically correct API version and model formatting for Google Gemini compatibility
-    if base_url and "generativelanguage.googleapis.com" in base_url:
-        # Correct the API version from v1 to v1beta (text-embedding-004 is not in v1/v1main)
-        if "/v1/" in base_url:
-            base_url = base_url.replace("/v1/", "/v1beta/")
-        elif base_url.endswith("/v1"):
-            base_url = base_url[:-3] + "/v1beta/"
-        
-        # Ensure base URL has trailing slash and /openai/ path prefix for OpenAI compatibility
-        if not base_url.endswith("/"):
-            base_url += "/"
-        if not base_url.endswith("openai/"):
-            base_url = base_url + "openai/"
+    is_gemini = (base_url and "generativelanguage.googleapis.com" in base_url) or (model and (model.startswith("models/") or "text-embedding" in model))
+
+    if is_gemini:
+        if base_url and "generativelanguage.googleapis.com" in base_url:
+            # Direct Gemini API call: override with the correct OpenAI compatibility endpoint
+            base_url = "https://generativelanguage.googleapis.com/v1beta/openai/"
+        elif base_url:
+            # Proxy/Gateway: upgrade /v1/ or /v1 to /v1beta/
+            if "/v1/" in base_url:
+                base_url = base_url.replace("/v1/", "/v1beta/")
+            elif base_url.endswith("/v1"):
+                base_url = base_url[:-3] + "/v1beta/"
             
+            # Ensure trailing slash
+            if not base_url.endswith("/"):
+                base_url += "/"
+        
         # Strip 'models/' prefix if present, as the OpenAI-compatible layer expects the model name directly
-        if model.startswith("models/"):
+        if model and model.startswith("models/"):
             model = model.replace("models/", "")
 
     with OpenAI(api_key=settings.openai_api_key, base_url=base_url) as client:
