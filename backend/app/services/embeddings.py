@@ -10,7 +10,7 @@ def get_embeddings(texts: List[str]) -> List[List[float]]:
     Local strategy requires PyTorch (~800 MB) which exceeds the memory limit.
     """
     if settings.embedding_strategy == "openai":
-        return _openai_embeddings(texts)
+        return _gemini_embeddings(texts)
     else:
         # Hard fail — local strategy is intentionally disabled for Render.
         # sentence-transformers pulls PyTorch which alone exceeds 512 MB RAM.
@@ -27,52 +27,66 @@ def get_query_embedding(query: str) -> List[float]:
     return get_embeddings([query])[0]
 
 
-def _openai_embeddings(texts: List[str]) -> List[List[float]]:
+def _gemini_embeddings(texts: List[str]) -> List[List[float]]:
     """
-    Calls the Gemini embedding endpoint directly via httpx to avoid OpenAI SDK
-    URL/model-name mangling that causes 'v1main' 404 errors.
+    Calls the native Gemini batchEmbedContents REST API directly via httpx.
 
-    The OpenAI Python SDK (v2.41.0) internally reformats the model name and
-    request path in ways incompatible with the Gemini OpenAI-compatibility layer,
-    even when base_url is correctly set. Bypassing the SDK with a raw HTTP POST
-    is the only reliable fix.
+    Why native API instead of OpenAI compat layer:
+    - Google's /openai/ compat path does NOT support embeddings — only chat.
+    - The OpenAI Python SDK mangles the URL/model name in incompatible ways.
+    - text-embedding-004 is deprecated; gemini-embedding-001 is the replacement.
+
+    Native endpoint:
+      POST /v1beta/models/{model}:batchEmbedContents
+      Authorization: Bearer <API_KEY>
     """
     import httpx
 
-    api_key = settings.openai_api_key
-    model = settings.embedding_model
-    base_url = settings.openai_base_url or ""
+    api_key = settings.openai_api_key  # Gemini API key stored in OPENAI_API_KEY env var
 
-    # --- Gemini base_url normalisation ---
-    # Ensure we always hit the correct v1beta OpenAI-compatibility endpoint.
-    if "generativelanguage.googleapis.com" in base_url:
-        base_url = "https://generativelanguage.googleapis.com/v1beta/openai/"
-    elif not base_url.endswith("/"):
-        base_url += "/"
+    # Use gemini-embedding-001 — text-embedding-004 is deprecated and returns 404.
+    # Allow override via EMBEDDING_MODEL env var, but strip any 'models/' prefix.
+    model = settings.embedding_model or "gemini-embedding-001"
+    if model in ("text-embedding-004", "text-embedding-3-small", "text-embedding-ada-002"):
+        # These are all either deprecated Gemini or OpenAI models — use the current one
+        model = "gemini-embedding-001"
+    model = model.replace("models/", "")  # strip prefix if present
 
-    # Strip 'models/' prefix — Gemini compat layer wants bare model name
-    if model.startswith("models/"):
-        model = model[len("models/"):]
-
-    url = base_url + "embeddings"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:batchEmbedContents"
 
     all_embeddings: List[List[float]] = []
-    batch_size = 100
+    batch_size = 100  # batchEmbedContents supports up to 100 items per request
 
     with httpx.Client(timeout=60.0) as client:
         for i in range(0, len(texts), batch_size):
-            batch = texts[i:i + batch_size]
+            batch = texts[i : i + batch_size]
+
+            # batchEmbedContents expects a list of {model, content} request objects
+            payload = {
+                "requests": [
+                    {
+                        "model": f"models/{model}",
+                        "content": {"parts": [{"text": text}]},
+                    }
+                    for text in batch
+                ]
+            }
+
             response = client.post(
                 url,
                 headers={
-                    "Authorization": f"Bearer {api_key}",
+                    "x-goog-api-key": api_key,
                     "Content-Type": "application/json",
                 },
-                json={"model": model, "input": batch},
+                json=payload,
             )
             response.raise_for_status()
             data = response.json()
-            all_embeddings.extend([item["embedding"] for item in data["data"]])
+
+            # Response shape: {"embeddings": [{"values": [...]}, ...]}
+            all_embeddings.extend(
+                [emb["values"] for emb in data["embeddings"]]
+            )
             del response, data
             gc.collect()
 
