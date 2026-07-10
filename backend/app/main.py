@@ -65,13 +65,42 @@ async def health_check():
 
 @app.get("/debug/env")
 async def debug_env():
-    # Only expose safe configuration variables to diagnose the Render issue
+    # Resolve the actual model that will be used for chat
+    chat_model = settings.openai_model
+    base_url = settings.openai_base_url or ""
+    if "generativelanguage.googleapis.com" in base_url:
+        if chat_model in ("gpt-4o-mini", "gpt-4o", "gpt-3.5-turbo", "gpt-4"):
+            chat_model = "gemini-2.0-flash"
+
     return {
         "embedding_strategy": settings.embedding_strategy,
         "openai_base_url": settings.openai_base_url,
         "embedding_model": settings.embedding_model,
-        "is_gemini": (settings.openai_base_url and "generativelanguage.googleapis.com" in settings.openai_base_url) or (settings.embedding_model and (settings.embedding_model.startswith("models/") or "text-embedding" in settings.embedding_model))
+        "is_gemini": ("generativelanguage.googleapis.com" in base_url) or (settings.embedding_model and "text-embedding" in settings.embedding_model),
+        "openai_model_raw": settings.openai_model,
+        "resolved_chat_model": chat_model,
     }
+
+
+@app.get("/debug/chat-test")
+async def debug_chat_test():
+    """Live test of the LLM call — returns full error details if it fails."""
+    import asyncio
+    from app.services.rag import ask_llm
+    try:
+        answer = await asyncio.to_thread(
+            ask_llm,
+            question="Say hello in one sentence.",
+            context="This is a test context."
+        )
+        return {"status": "ok", "answer": answer}
+    except Exception as e:
+        import traceback
+        return {
+            "status": "error",
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }
 
 
 @app.exception_handler(Exception)
