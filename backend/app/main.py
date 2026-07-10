@@ -63,6 +63,17 @@ async def health_check():
     return {"status": "ok"}
 
 
+@app.get("/debug/env")
+async def debug_env():
+    # Only expose safe configuration variables to diagnose the Render issue
+    return {
+        "embedding_strategy": settings.embedding_strategy,
+        "openai_base_url": settings.openai_base_url,
+        "embedding_model": settings.embedding_model,
+        "is_gemini": (settings.openai_base_url and "generativelanguage.googleapis.com" in settings.openai_base_url) or (settings.embedding_model and (settings.embedding_model.startswith("models/") or "text-embedding" in settings.embedding_model))
+    }
+
+
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     logger.error(f"Unhandled exception: {exc}", exc_info=True)
