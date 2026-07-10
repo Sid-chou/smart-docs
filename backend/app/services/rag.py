@@ -50,10 +50,12 @@ def ask_llm(question: str, context: str) -> str:
         "gemini-1.5-flash", "gemini-1.5-flash-latest",
         "gemini-1.5-pro",  "gemini-1.5-pro-latest",
         "gemini-1.0-pro",  "gemini-pro",
+        # gemini-2.0-flash has limit:0 on free tier — use lite variant
+        "gemini-2.0-flash",
     }
     if "generativelanguage.googleapis.com" in base_url:
         if model in DEPRECATED_MODELS or not model.startswith("gemini-"):
-            model = "gemini-2.0-flash"   # Current fast Gemini model
+            model = "gemini-2.0-flash-lite"  # Free-tier supported model
 
     with OpenAI(api_key=settings.openai_api_key, base_url=base_url) as client:
         messages = [
