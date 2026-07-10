@@ -38,13 +38,22 @@ def ask_llm(question: str, context: str) -> str:
     from openai import OpenAI
 
     model = settings.openai_model
-    base_url = settings.openai_base_url
+    base_url = settings.openai_base_url or ""
 
-    # When using a Gemini API key via the OpenAI compat layer,
-    # 'gpt-4o-mini' is not a valid model name — map it to Gemini equivalent.
-    if base_url and "generativelanguage.googleapis.com" in base_url:
-        if model in ("gpt-4o-mini", "gpt-4o", "gpt-3.5-turbo", "gpt-4"):
-            model = "gemini-2.0-flash"   # Fast, cheap Gemini model — equivalent to gpt-4o-mini
+    # When using Gemini via the OpenAI compat layer, ensure we use a
+    # currently supported model. Both OpenAI model names AND old Gemini
+    # model names (1.5-flash, 1.0-pro etc.) must be remapped.
+    DEPRECATED_MODELS = {
+        # OpenAI names (not valid on Gemini at all)
+        "gpt-4o-mini", "gpt-4o", "gpt-3.5-turbo", "gpt-4",
+        # Deprecated / retired Gemini models
+        "gemini-1.5-flash", "gemini-1.5-flash-latest",
+        "gemini-1.5-pro",  "gemini-1.5-pro-latest",
+        "gemini-1.0-pro",  "gemini-pro",
+    }
+    if "generativelanguage.googleapis.com" in base_url:
+        if model in DEPRECATED_MODELS or not model.startswith("gemini-"):
+            model = "gemini-2.0-flash"   # Current fast Gemini model
 
     with OpenAI(api_key=settings.openai_api_key, base_url=base_url) as client:
         messages = [
