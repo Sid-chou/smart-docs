@@ -36,8 +36,17 @@ def build_context(chunks: List[Dict[str, Any]]) -> str:
 
 def ask_llm(question: str, context: str) -> str:
     from openai import OpenAI
-    
-    with OpenAI(api_key=settings.openai_api_key, base_url=settings.openai_base_url) as client:
+
+    model = settings.openai_model
+    base_url = settings.openai_base_url
+
+    # When using a Gemini API key via the OpenAI compat layer,
+    # 'gpt-4o-mini' is not a valid model name — map it to Gemini equivalent.
+    if base_url and "generativelanguage.googleapis.com" in base_url:
+        if model in ("gpt-4o-mini", "gpt-4o", "gpt-3.5-turbo", "gpt-4"):
+            model = "gemini-2.0-flash"   # Fast, cheap Gemini model — equivalent to gpt-4o-mini
+
+    with OpenAI(api_key=settings.openai_api_key, base_url=base_url) as client:
         messages = [
             {"role": "system", "content": SYSTEM_PROMPT},
             {
@@ -47,12 +56,13 @@ def ask_llm(question: str, context: str) -> str:
         ]
 
         response = client.chat.completions.create(
-            model=settings.openai_model,   # gpt-4o-mini: cheaper + smarter than gpt-3.5-turbo
+            model=model,
             messages=messages,
             temperature=0.1,        # Low temperature = factual, less creative
             max_tokens=1000,
         )
         return response.choices[0].message.content
+
 
 
 def run_rag_pipeline(
