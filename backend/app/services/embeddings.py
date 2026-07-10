@@ -29,51 +29,51 @@ def get_query_embedding(query: str) -> List[float]:
 
 def _openai_embeddings(texts: List[str]) -> List[List[float]]:
     """
-    Calls OpenAI Embeddings API in batches.
-    Uses context manager for the client to ensure HTTP connections are closed.
-    Explicit gc.collect() after each batch releases response objects promptly —
-    important on memory-constrained hosts like Render (512 MB).
+    Calls the Gemini embedding endpoint directly via httpx to avoid OpenAI SDK
+    URL/model-name mangling that causes 'v1main' 404 errors.
+
+    The OpenAI Python SDK (v2.41.0) internally reformats the model name and
+    request path in ways incompatible with the Gemini OpenAI-compatibility layer,
+    even when base_url is correctly set. Bypassing the SDK with a raw HTTP POST
+    is the only reliable fix.
     """
-    from openai import OpenAI
-    all_embeddings = []
+    import httpx
 
-    base_url = settings.openai_base_url
+    api_key = settings.openai_api_key
     model = settings.embedding_model
+    base_url = settings.openai_base_url or ""
 
-    # Automatically correct API version and model formatting for Google Gemini compatibility
-    is_gemini = (base_url and "generativelanguage.googleapis.com" in base_url) or (model and (model.startswith("models/") or "text-embedding" in model))
+    # --- Gemini base_url normalisation ---
+    # Ensure we always hit the correct v1beta OpenAI-compatibility endpoint.
+    if "generativelanguage.googleapis.com" in base_url:
+        base_url = "https://generativelanguage.googleapis.com/v1beta/openai/"
+    elif not base_url.endswith("/"):
+        base_url += "/"
 
-    if is_gemini:
-        if base_url and "generativelanguage.googleapis.com" in base_url:
-            # Direct Gemini API call: override with the correct OpenAI compatibility endpoint
-            base_url = "https://generativelanguage.googleapis.com/v1beta/openai/"
-        elif base_url:
-            # Proxy/Gateway: upgrade /v1/ or /v1 to /v1beta/
-            if "/v1/" in base_url:
-                base_url = base_url.replace("/v1/", "/v1beta/")
-            elif base_url.endswith("/v1"):
-                base_url = base_url[:-3] + "/v1beta/"
-            
-            # Ensure trailing slash
-            if not base_url.endswith("/"):
-                base_url += "/"
-        
-        # Strip 'models/' prefix if present, as the OpenAI-compatible layer expects the model name directly
-        if model and model.startswith("models/"):
-            model = model.replace("models/", "")
+    # Strip 'models/' prefix — Gemini compat layer wants bare model name
+    if model.startswith("models/"):
+        model = model[len("models/"):]
 
-    with OpenAI(api_key=settings.openai_api_key, base_url=base_url) as client:
-        batch_size = 100
+    url = base_url + "embeddings"
+
+    all_embeddings: List[List[float]] = []
+    batch_size = 100
+
+    with httpx.Client(timeout=60.0) as client:
         for i in range(0, len(texts), batch_size):
             batch = texts[i:i + batch_size]
-            response = client.embeddings.create(
-                model=model,
-                input=batch,
+            response = client.post(
+                url,
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={"model": model, "input": batch},
             )
-            # Extract only the float vectors — do NOT hold the full response object
-            all_embeddings.extend([item.embedding for item in response.data])
-            # Release the response object immediately; don't wait for GC sweep
-            del response
+            response.raise_for_status()
+            data = response.json()
+            all_embeddings.extend([item["embedding"] for item in data["data"]])
+            del response, data
             gc.collect()
 
     return all_embeddings
