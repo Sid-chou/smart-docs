@@ -125,6 +125,162 @@ async def debug_chat_test():
         }
 
 
+@app.get("/debug/chunks")
+async def debug_chunks():
+    """
+    Check 1: Are chunks saved in MongoDB Atlas?
+    Check 2: Does vector search return results (RAG connected)?
+
+    Open in browser: https://your-render-url.onrender.com/debug/chunks
+    No auth required — for debugging only.
+    """
+    import asyncio
+    import traceback
+    import pymongo
+    from app.core.config import settings
+
+    result = {
+        "step1_env": {},
+        "step2_mongo_connection": {},
+        "step3_chunks_stored": {},
+        "step4_embedding_api": {},
+        "step5_vector_search": {},
+        "verdict": "",
+    }
+
+    # Step 1: Env check
+    key = settings.openai_api_key or ""
+    result["step1_env"] = {
+        "embedding_strategy": settings.embedding_strategy,
+        "embedding_model": settings.embedding_model,
+        "api_key_present": bool(key and key != "sk-..."),
+        "api_key_preview": f"{key[:8]}..." if len(key) > 8 else "MISSING",
+        "mongodb_url_set": bool(settings.mongodb_url),
+        "status": "ok" if (settings.embedding_strategy == "openai" and key and key != "sk-...") else "FAIL — check EMBEDDING_STRATEGY and OPENAI_API_KEY env vars",
+    }
+
+    # Step 2: MongoDB connection + chunk count
+    try:
+        client = pymongo.MongoClient(settings.mongodb_url, serverSelectionTimeoutMS=5000)
+        client.admin.command("ping")
+        db = client[settings.database_name]
+        total_chunks = db["chunks"].count_documents({})
+        total_docs   = db["documents"].count_documents({})
+        indexed_docs = db["documents"].count_documents({"is_indexed": True})
+        failed_docs  = db["documents"].count_documents({"status": {"$in": ["failed_error", "failed_unreadable"]}})
+
+        result["step2_mongo_connection"] = {"status": "ok", "connected": True}
+        result["step3_chunks_stored"] = {
+            "total_chunks_in_atlas": total_chunks,
+            "total_documents_uploaded": total_docs,
+            "documents_indexed_successfully": indexed_docs,
+            "documents_failed": failed_docs,
+            "status": "ok" if total_chunks > 0 else "FAIL — 0 chunks. Upload a document first, or check Render logs for indexing errors",
+        }
+
+        # Show per-document breakdown
+        if total_chunks > 0:
+            sample = db["chunks"].find_one({}, {"text": 1, "filename": 1, "chunk_index": 1, "embedding": 1})
+            embed_dims = len(sample.get("embedding", [])) if sample else 0
+            doc_ids = db["chunks"].distinct("document_id")
+            breakdown = []
+            for did in doc_ids[:5]:
+                c = db["chunks"].count_documents({"document_id": did})
+                fname = db["chunks"].find_one({"document_id": did}, {"filename": 1})
+                breakdown.append({"document_id": did, "filename": fname.get("filename", "?"), "chunks": c})
+            result["step3_chunks_stored"]["embedding_dimensions"] = embed_dims
+            result["step3_chunks_stored"]["indexed_documents_breakdown"] = breakdown
+            result["step3_chunks_stored"]["sample_text_preview"] = (sample.get("text", "")[:150] + "...") if sample else ""
+
+        # Show failed doc errors
+        if failed_docs > 0:
+            failures = list(db["documents"].find(
+                {"status": {"$in": ["failed_error", "failed_unreadable"]}},
+                {"original_filename": 1, "status": 1, "error_message": 1}
+            ).limit(5))
+            result["step3_chunks_stored"]["failed_documents"] = [
+                {"filename": f.get("original_filename"), "status": f.get("status"), "error": f.get("error_message")}
+                for f in failures
+            ]
+
+    except Exception as e:
+        result["step2_mongo_connection"] = {"status": "FAIL", "error": str(e)}
+        result["step3_chunks_stored"] = {"status": "skipped — no DB connection"}
+        result["verdict"] = "BROKEN — MongoDB connection failed. Check MONGODB_URL env var on Render."
+        return result
+
+    # Step 4: Embedding API test
+    try:
+        import httpx
+        model = settings.embedding_model or "gemini-embedding-001"
+        if model in ("text-embedding-004", "text-embedding-3-small", "text-embedding-ada-002"):
+            model = "gemini-embedding-001"
+        model = model.replace("models/", "")
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:batchEmbedContents"
+        payload = {"requests": [{"model": f"models/{model}", "content": {"parts": [{"text": "test"}]}}]}
+        resp = httpx.post(url, headers={"x-goog-api-key": settings.openai_api_key, "Content-Type": "application/json"}, json=payload, timeout=15.0)
+        if resp.status_code == 200:
+            dims = len(resp.json()["embeddings"][0]["values"])
+            result["step4_embedding_api"] = {"status": "ok", "model": model, "dimensions": dims}
+        else:
+            result["step4_embedding_api"] = {"status": f"FAIL — HTTP {resp.status_code}", "detail": resp.text[:300]}
+    except Exception as e:
+        result["step4_embedding_api"] = {"status": "FAIL", "error": str(e)}
+
+    # Step 5: Vector search test (only if chunks exist)
+    if total_chunks == 0:
+        result["step5_vector_search"] = {"status": "skipped — no chunks to search"}
+    else:
+        try:
+            import httpx
+            model = settings.embedding_model or "gemini-embedding-001"
+            if model in ("text-embedding-004", "text-embedding-3-small", "text-embedding-ada-002"):
+                model = "gemini-embedding-001"
+            model = model.replace("models/", "")
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:batchEmbedContents"
+            payload = {"requests": [{"model": f"models/{model}", "content": {"parts": [{"text": "summarize the document"}]}}]}
+            resp = httpx.post(url, headers={"x-goog-api-key": settings.openai_api_key, "Content-Type": "application/json"}, json=payload, timeout=15.0)
+            resp.raise_for_status()
+            query_vec = resp.json()["embeddings"][0]["values"]
+
+            sample_uid = db["chunks"].find_one({}, {"user_id": 1})["user_id"]
+            pipeline = [
+                {"$vectorSearch": {"index": "vector_index", "path": "embedding", "queryVector": query_vec, "numCandidates": 50, "limit": 3, "filter": {"user_id": {"$eq": sample_uid}}}},
+                {"$project": {"_id": 0, "text": 1, "filename": 1, "chunk_index": 1, "score": {"$meta": "vectorSearchScore"}}},
+            ]
+            hits = list(db["chunks"].aggregate(pipeline))
+            if hits:
+                result["step5_vector_search"] = {
+                    "status": "ok — RAG pipeline is connected",
+                    "results_returned": len(hits),
+                    "top_result": {"filename": hits[0]["filename"], "chunk_index": hits[0]["chunk_index"], "score": round(hits[0]["score"], 3), "preview": hits[0]["text"][:120] + "..."},
+                }
+            else:
+                result["step5_vector_search"] = {
+                    "status": "FAIL — search returned 0 results",
+                    "likely_cause": "Atlas vector index 'vector_index' not created or still building. Go to Atlas UI > Search Indexes and check.",
+                }
+        except Exception as e:
+            result["step5_vector_search"] = {"status": "FAIL", "error": str(e), "traceback": traceback.format_exc()}
+
+    # Final verdict
+    s3 = result["step3_chunks_stored"].get("status", "")
+    s4 = result["step4_embedding_api"].get("status", "")
+    s5 = result["step5_vector_search"].get("status", "")
+    if "ok" in s3 and "ok" in s4 and "ok" in s5:
+        result["verdict"] = "ALL GOOD — chunks saved, embeddings work, RAG search connected. PDF summarization should work."
+    elif total_chunks == 0:
+        result["verdict"] = "BROKEN — No chunks in Atlas. Set EMBEDDING_STRATEGY=openai on Render, then re-upload your PDF."
+    elif "FAIL" in s4:
+        result["verdict"] = "BROKEN — Embedding API failed. Check OPENAI_API_KEY on Render."
+    elif "FAIL" in s5:
+        result["verdict"] = "BROKEN — Chunks exist but vector search fails. Create 'vector_index' in Atlas UI."
+    else:
+        result["verdict"] = "Partial — check individual steps above."
+
+    return result
+
+
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     logger.error(f"Unhandled exception: {exc}", exc_info=True)
