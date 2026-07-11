@@ -53,7 +53,7 @@ def ask_llm(question: str, context: str) -> str:
     }
     if "generativelanguage.googleapis.com" in base_url:
         if model in DEPRECATED_MODELS or not model.startswith("gemini-"):
-            model = "gemini-2.0-flash"  # Fast, capable — confirmed available on new key
+            model = "gemini-2.5-flash-lite"  # Fast, capable — confirmed available on new key
 
     with OpenAI(api_key=settings.openai_api_key, base_url=base_url) as client:
         messages = [
