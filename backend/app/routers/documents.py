@@ -106,7 +106,7 @@ async def index_document_in_background(
     Memory discipline:
       - `text` and `chunks` are explicitly deleted after use.
       - Raw uploaded file is removed after indexing — it's dead weight once
-        vectors are in ChromaDB. Render's disk is ephemeral anyway.
+        vectors are in MongoDB Atlas. Render's disk is ephemeral anyway.
       - gc.collect() forces reclaim after heavy allocations in a worker thread.
     """
     import gc
@@ -127,7 +127,7 @@ async def index_document_in_background(
         )
 
         chunk_count = len(chunks)
-        # Free chunks array — vectors are now in ChromaDB
+        # Free chunks array — vectors are now in MongoDB Atlas
         del chunks
         gc.collect()
 
@@ -179,7 +179,7 @@ async def index_document_in_background(
 
 def _sync_index_chunks(chunks, document_id, user_id, filename):
     """
-    Synchronous wrapper for ChromaDB indexing.
+    Synchronous wrapper for Atlas vector indexing.
     Called via asyncio.to_thread() — runs in a worker thread, not the event loop.
     """
     index_document_chunks(
@@ -255,7 +255,7 @@ async def delete_document(
     current_user: dict = Depends(get_current_user),
 ):
     """
-    Ordered deletion across three systems: ChromaDB, disk, MongoDB.
+    Ordered deletion across three systems: Atlas chunks, disk, MongoDB.
     """
     doc = await db.documents.find_one({
         "_id": ObjectId(document_id),
@@ -270,7 +270,7 @@ async def delete_document(
         {"$set": {"status": "deleting"}}
     )
 
-    # Step 2: Remove vectors from ChromaDB
+    # Step 2: Remove vectors from MongoDB Atlas chunks collection
     try:
         from app.services.vectorstore import delete_document_chunks
         delete_document_chunks(
