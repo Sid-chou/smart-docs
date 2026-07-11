@@ -26,8 +26,9 @@ httpx>=0.27.0
 # It pulls PyTorch (~800MB) which exceeds Render's 512MB RAM limit.
 # Local embeddings are disabled. Set EMBEDDING_STRATEGY=openai in env.
 
-# Vector store
-chromadb==0.5.3
+# Vector store: MongoDB Atlas Vector Search (free M0 tier)
+# chromadb removed — it stored data on Render's ephemeral disk (lost on redeploy)
+# Atlas Vector Search uses motor/pymongo already listed above — no extra package
 
 # Utilities
 python-dotenv==1.0.1

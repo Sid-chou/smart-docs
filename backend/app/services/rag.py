@@ -1,5 +1,5 @@
 from typing import List, Optional, Dict, Any
-from app.services.retrieval import retrieve_chunks
+from app.services.retrieval import retrieve_relevant_chunks as retrieve_chunks
 from app.core.config import settings
 
 
