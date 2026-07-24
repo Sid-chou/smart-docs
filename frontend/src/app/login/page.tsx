@@ -38,7 +38,7 @@ export default function LoginPage() {
             <path d="M2 12a3.5 3.5 0 0 1 3.5-3.5h1.5a3.5 3.5 0 0 1 0 7H5.5A3.5 3.5 0 0 1 2 12z" />
             <path d="M22 12a3.5 3.5 0 0 1-3.5 3.5h-1.5a3.5 3.5 0 0 1 0-7h1.5A3.5 3.5 0 0 1 22 12z" />
           </svg>
-          <span className="text-[17px] font-black tracking-[0.2em] text-white">PEPPO</span>
+          <span className="text-[17px] font-black tracking-[0.2em] text-white">SMART DOCS</span>
         </div>
 
         {/* LoginForm Card */}
