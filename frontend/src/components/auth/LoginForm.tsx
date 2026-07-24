@@ -7,7 +7,7 @@ import * as z from "zod";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/lib/stores/auth";
 import { apiClient } from "@/lib/api/client";
-import { IconLoader, IconAlertCircle } from "@tabler/icons-react";
+import { IconLoader, IconAlertCircle, IconEye, IconEyeOff } from "@tabler/icons-react";
 import Link from "next/link";
 
 const loginSchema = z.object({
@@ -22,6 +22,7 @@ export function LoginForm() {
   const loginStore = useAuthStore((state) => state.login);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const {
     register,
@@ -116,13 +117,26 @@ export function LoginForm() {
           <label className="block text-xs font-black text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-1">
             Password
           </label>
-          <input
-            type="password"
-            {...register("password")}
-            placeholder="••••••••"
-            disabled={isLoading}
-            className="w-full px-4 py-3 rounded-xl border border-slate-200 hover:border-slate-300 focus:border-indigo-500 bg-slate-50/50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-slate-100 dark:hover:border-zinc-700 text-sm focus:outline-none transition-colors"
-          />
+          <div className="relative">
+            <input
+              type={showPassword ? "text" : "password"}
+              {...register("password")}
+              placeholder="••••••••"
+              disabled={isLoading}
+              className="w-full pl-4 pr-11 py-3 rounded-xl border border-slate-200 hover:border-slate-300 focus:border-indigo-500 bg-slate-50/50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-slate-100 dark:hover:border-zinc-700 text-sm focus:outline-none transition-colors"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:text-zinc-500 dark:hover:text-zinc-300 cursor-pointer select-none focus:outline-none"
+            >
+              {showPassword ? (
+                <IconEyeOff className="w-5 h-5" />
+              ) : (
+                <IconEye className="w-5 h-5" />
+              )}
+            </button>
+          </div>
           {errors.password && (
             <p className="text-xs text-red-500 font-medium mt-1">{errors.password.message}</p>
           )}
